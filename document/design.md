@@ -281,6 +281,8 @@ This is the brain of the workflow, and we need to think through it. It functions
 2. subscribe to the meta_extraction_done topic, update RDS with the meta data, decides the virus scanner list, and send tasks to the queues of the scanners. update the process information, including status, and also store the counter (ie, 0)
 3. subscribe to the virus_scanner_done topic, update DynamoDB with the results, increase counter, update process status.
 
+Actually, we can leverage the AWS SQS-SNS integration to have the virus-scanner SQS directly subscribe to SNS topic. Therefore, the orchestrator does not need to iterate all the SQS queues and put message in each queue. Instead, it can just publish to one topic.
+
 The biggest risk of this design is that this orchestrator becomes the Single Point of Failure of the whole architecture. The other option is to place the same logic in the meta-extraction and virus-scanner services. Therefore, in terms of availability, we need to choose between "distributed failure" vs "centralized failure". With K8s (EKS, GKE) we can mitigate the failure, so we suggest to use the orchestrator.
 
 Also notice that none of the services (meta-extractor, virus-scanner) write to database, instead, they put the results in the SNS message (the SNS message size limit is large enough), this design will make the services simple enough, and also get us better control of the database writes.
@@ -441,6 +443,8 @@ Application-level metrics:
     Versioning and rollbacks: Use versioning for your service deployments, so you can easily roll back to a previous version in case of issues with a new release. This can help you quickly recover from failures caused by software bugs or configuration errors.
 
 ## Summary
+
+![final design](images/final.png)
 
     Frontend: A React app for uploading files and displaying results.
         Uploads files directly to S3 using pre-signed URLs.
