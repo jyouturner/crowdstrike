@@ -54,5 +54,58 @@ This is the POC of Intellidox, for users to upload and process files, for exampl
 
 ### Monitoring: Datadog for monitoring and alerting.
 
-## 
+## What I Don't Like ...
 
+The above design provides great efficiency, scalability, and resilience as an event-driven model using dedicated services like SQS and SNS, except one problem:
+
+`it makes local development and testing hard`
+
+Can we achieve same benefit without SQS, SNS, queue or event broker? There are at least below options
+
+1. Kubernates API and Jobs. K8s support job management, we can call its API to schedule and run jobs.
+2. RDS (Postgres). Create jobs table, and have services poll the jobs.
+3. Redis. It has support of queue and pub/sub too.
+
+Considering Redis is used widely for caching, and easy to install at local with Docker, we can choose to abstract the "job management" layer, to use Redis for local development and testing, and SQS/SNS for other environments.
+
+### Redis vs SQS/SNS
+
+We can create an abstraction layer to manage events or jobs, making it easier to switch between different implementations like Redis, SQS, and SNS, depending on the environment. This abstraction can be achieved by using the Strategy pattern or by implementing a custom interface for event management.
+
+````Go
+type EventManager interface {
+	Publish(topic string, message interface{}) error
+	Subscribe(topic string, handler func(message interface{})) error
+	Enqueue(queue string, message interface{}) error
+	Dequeue(queue string, handler func(message interface{})) error
+}
+````
+
+## ServiceWeaver
+
+In reality, often we start with one single project codebase, and eventually start to introduce more "micro-services" along with organization structure mirroring them, for example, in a year or two, we may see multiple engineering teams maintaining even more services:
+
+* Prodcut enginering: React and user experiences 
+* API: web service
+* Platform engineering: document service, virus scan service
+
+And we connect the services through
+
+* Queue
+* Restful API
+* gRPC
+
+With micro-service, we achieve the "do one thing and do it well", however, when a bunch of things all loosed coupled together, we get more chaos, and start to miss the benefit of single binary or codebase.
+
+[The ServiceWeaver Framework](https://serviceweaver.dev/) may help us
+
+`Write your application as a modular binary. Deploy it as a set of microservices`
+
+it seems it tries to abstract the "R" (remote) in the gRPC call so we can run direct procedure call at local, and gRPC call on production.
+
+## Experiments
+
+In this project, we will experiment
+
+1. abstraction to use Redis for local job management
+2. use ServiceWeaver to abstract the gRPC
