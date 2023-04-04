@@ -358,90 +358,100 @@ To make sure the system performs we can leverage caching
 With such distributed system, we need to setup extensive monitoring. For example, we can use Datadog to monitor AWS services and also our services.
 
 AWS Services:
+
     S3:
-        Bucket size (number of objects and total storage used)
-        Request rate (PUT, GET, DELETE, and other operations)
-        Latency (time taken to complete requests)
-        Error rate (4xx and 5xx errors)
+
+        * Bucket size (number of objects and total storage used)
+        * Request rate (PUT, GET, DELETE, and other operations)
+        * Latency (time taken to complete requests)
+        * Error rate (4xx and 5xx errors)
     SQS:
-        Queue size (number of messages in the queue)
-        Message age (age of oldest message in the queue)
-        Number of messages sent/received/deleted
-        Latency (time taken to send/receive messages)
-        Error rate (failed SendMessage and ReceiveMessage calls)
+
+        * Queue size (number of messages in the queue)
+        * Message age (age of oldest message in the queue)
+        * Number of messages sent/received/deleted
+        * Latency (time taken to send/receive messages)
+        * Error rate (failed SendMessage and ReceiveMessage calls)
+    
     RDS (PostgreSQL):
-        CPU utilization
-        Memory usage
-        Storage usage
-        Connection count
-        Read and write IOPS
-        Database transaction rate
-        Query latency
-        Error rate
+        
+        * CPU utilization, Memory usage, Storage usage
+        * Connection count
+        * Read and write IOPS
+        * Database transaction rate
+        * Query latency
+        * Error rate
+    
     DynamoDB:
-        Read and write capacity units
-        Consumed read and write capacity
-        Throttled read and write events
-        Latency (time taken for GetItem, PutItem, and UpdateItem operations)
-        Error rate (failed read and write requests)
+
+        * Read and write capacity units
+        * Consumed read and write capacity
+        * Throttled read and write events
+        * Latency (time taken for GetItem, PutItem, and UpdateItem operations)
+        * Error rate (failed read and write requests)
 EKS:
+
     Node-level metrics:
-        CPU usage and utilization
-        Memory usage and utilization
-        Disk usage and IOPS
-        Network throughput (inbound and outbound)
+
+        * CPU usage and utilization, Memory usage and utilization, Disk usage and IOPS
+        * Network throughput (inbound and outbound)
+    
     Pod-level metrics:
-        CPU usage and limits
-        Memory usage and limits
-        Network throughput (inbound and outbound)
-        Number of restarts (to detect crash loops)
-        Pod status (Running, Pending, Failed, etc.)
-    Kubernetes control plane metrics:
-        API server request rate and latency
-        etcd read and write latency
-        Controller manager and scheduler metrics
+        
+        * CPU usage and limits, Memory usage and limits, Network throughput (inbound and outbound)
+        * Number of restarts (to detect crash loops)
+        * Pod status (Running, Pending, Failed, etc.)
 
 Application-level metrics:
-        Request rate (for all services)
-        Error rate (HTTP 4xx and 5xx errors), available in Api Gateway
-        Request latency
-        Custom service metrics, if available (e.g., task processing time, number of processed tasks)
+
+        * Request rate (for all services)
+        * Error rate (HTTP 4xx and 5xx errors), available in Api Gateway
+        * Request latency
+        * Custom service metrics, if available (e.g., task processing time, number of processed tasks)
 
 
 ## Failure Handling
 
     Frontend:
+
         Implement retries with exponential backoff for API calls.
 
     API:
-        Add error handling and logging to track failures.
-        Use retries with exponential backoff when interacting with other services (e.g., S3, SQS, SNS).
-        Return appropriate error messages and HTTP status codes for failed requests.
+
+        * Add error handling and logging to track failures.
+        * Use retries with exponential backoff when interacting with other services (e.g., S3, SQS, SNS).
+        * Return appropriate error messages and HTTP status codes for failed requests.
 
     S3:
-        Use S3 bucket versioning.
-        Enable S3 object replication to another AWS region for added data durability.
+
+        * Use S3 bucket versioning.
+        * Enable S3 object replication to another AWS region for added data durability.
 
     EKS Cluster:
-        Implement liveness and readiness probes for microservices to ensure that unhealthy instances are restarted.
-        Set desired number of replicas are running at all times.
-        Monitor pod logs and resource usage to identify and mitigate issues.
+
+        * Implement liveness and readiness probes for microservices to ensure that unhealthy instances are restarted.
+        * Set desired number of replicas are running at all times.
+        * Monitor pod logs and resource usage to identify and mitigate issues.
 
     SQS Queues:
-        Enable dead-letter queues to handle messages that can't be processed successfully after a specified number of attempts.
-        Monitor the number of messages in the queues and adjust the number of service instances or retries accordingly.
+
+        * Enable dead-letter queues to handle messages that can't be processed successfully after a specified number of attempts.
+        * Monitor the number of messages in the queues and adjust the number of service instances or retries accordingly.
 
     SNS Topics:
-        Monitor SNS metrics, such as the number of messages published, failed deliveries, and retries.
-        Ensure subscribers have appropriate error handling and retries.
+
+        * Monitor SNS metrics, such as the number of messages published, failed deliveries, and retries.
+        * Ensure subscribers have appropriate error handling and retries.
 
     RDS PostgreSQL and DynamoDB:
-        Enable automated backups and point-in-time recovery to protect against data loss.
-        Monitor database performance and logs to identify issues and optimize queries as needed.
+
+        * Enable automated backups and point-in-time recovery to protect against data loss.
+        * Monitor database performance and logs to identify issues and optimize queries as needed.
 
     Monitoring:
-        Set up alerts in Datadog for critical issues, such as high error rates, high latency, or resource saturation.
-        Regularly review logs and metrics to identify trends and potential issues.
+
+        * Set up alerts in Datadog for critical issues, such as high error rates, high latency, or resource saturation.
+        * Regularly review logs and metrics to identify trends and potential issues.
 
 
 ## Application Level Failure Handling
@@ -464,41 +474,51 @@ Application-level metrics:
 
 ![final design](images/final.png)
 
-    Frontend: A React app for uploading files and displaying results.
+    * Frontend: A React app for uploading files and displaying results.
+        
         Uploads files directly to S3 using pre-signed URLs.
+        
         Calls the API to confirm the upload and start processing.
 
-    API: RESTful API, web services deployed to EKS
+    * API: RESTful API, web services deployed to EKS
+        
         Handles file upload requests and generates pre-signed URLs.
+        
         Handles "confirm" requests and adds messages to the MetadataExtractionQueue.
 
-    S3: Stores the uploaded files.
+    * S3: Stores the uploaded files.
 
-    Lambda: Generates pre-signed URLs for S3 uploads.
+    * Lambda: Generates pre-signed URLs for S3 uploads.
 
-    EKS Cluster: Contains the following microservices and components:
+    * EKS Cluster: Contains the following microservices and components:
+        
         Metadata-extraction service: Extracts metadata from the files.
-            Listens to the MetadataExtractionQueue.
-            Publishes messages to the MetadataExtractionCompleted SNS topic when the task is completed.
+            
+            *Listens to the MetadataExtractionQueue.
+            *Publishes messages to the MetadataExtractionCompleted SNS topic when the task is completed.
+        
         Virus scanner services: Multiple virus scanner pods from different vendors.
-            Each pod listens to its own SQS queue (e.g., VirusScannerQueue_A, VirusScannerQueue_B, etc.).
-            Each pod's SQS queue is subscribed to the VirusScanningRequested SNS topic.
-            Publishes messages to the VirusScanningCompleted SNS topic when the task is completed.
+            * Each pod listens to its own SQS queue (e.g., VirusScannerQueue_A, VirusScannerQueue_B, etc.).
+            * Each pod's SQS queue is subscribed to the VirusScanningRequested SNS topic.
+            * Publishes messages to the VirusScanningCompleted SNS topic when the task is completed.
 
     SNS topics:
-        MetadataExtractionCompleted: Notifies subscribers when the metadata extraction is done.
-        VirusScanningRequested: Distributes virus scanning tasks to multiple scanner pods.
-        VirusScanningCompleted: Notifies subscribers when the virus scanning is done.
+
+        * MetadataExtractionCompleted: Notifies subscribers when the metadata extraction is done.
+        * VirusScanningRequested: Distributes virus scanning tasks to multiple scanner pods.
+        * VirusScanningCompleted: Notifies subscribers when the virus scanning is done.
 
     SQS queues:
-        MetadataExtractionQueue: Holds tasks for the metadata-extraction service.
-        VirusScannerQueue_A, VirusScannerQueue_B, etc.: Holds tasks for each virus scanner pod.
+
+        * MetadataExtractionQueue: Holds tasks for the metadata-extraction service.
+        * VirusScannerQueue_A, VirusScannerQueue_B, etc.: Holds tasks for each virus scanner pod.
 
     RDS PostgreSQL: Stores file metadata.
 
     DynamoDB: Stores virus scanning results.
 
     Monitoring: Datadog for monitoring and alerting.
+    
 ## Notes
 
 ### Script Update
