@@ -149,11 +149,14 @@ In the updated version, we have
     * Client to "pull" by usual HTTP API. 
     
 Here we suggest to use HTTP API, since this use case is not much conversational, like game or chat room. Developers are more familiar with Restful API too. We will mitigate concerns of throughput by caching, and autoscaling.
+
 5. Our web services have 4 endpoints
+
     * /docs/request-upload
     * /docs/{uuid}/confirm-upload
     * /docs/{uuid}/meta
     * /docs/{uuid}/scan-results
+    
 6. A Lambda function, triggered by the S3 event when a file is uploaded, to update the Document status to "uploaded", and "upload_time"
 
 ### API Endpoints
