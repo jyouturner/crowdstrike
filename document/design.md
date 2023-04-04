@@ -156,21 +156,25 @@ Here we suggest to use HTTP API, since this use case is not much conversational,
     * /docs/{uuid}/confirm-upload
     * /docs/{uuid}/meta
     * /docs/{uuid}/scan-results
-    
+
 6. A Lambda function, triggered by the S3 event when a file is uploaded, to update the Document status to "uploaded", and "upload_time"
 
 ### API Endpoints
 
 1.  POST /docs/request-upload
+
     Request has file name
     ````JSON
     {
         "file_name": "abc.pdf"
     }
     ````
+
     Note: Talk with React dev to understand whether they can get the file name and size before making above request.
     The service will generate a pre-signed S3 url, create a new record in the Document table, and return the ID (UUID)
+
     In S3, we can use Year (YYYY) or Year-Month (YYYYMM) as bucket name, this way we can move older buckets to code storage.
+
     We can use the document id/UUID as object name in S3. It will help our other processes to easiy identify the document record.
     The response will be simply
     ````JSON
@@ -185,8 +189,11 @@ Here we suggest to use HTTP API, since this use case is not much conversational,
     To further improve performance, we can consider generating URLs and storing them in Cache (redis) with TTL. The service can just grab URL when needed. Of course, that means we will have a backend job (Lambda) to continuously generate new URLs.
 
 2. /docs/{uuid}/confirm-upload
+
     POST method, with document id in the request path
+
     This simply signify to our system that we can start the process now.
+
     we will return the basic document attributes, status ("in-progress")
     ````JSON
     {
@@ -208,7 +215,9 @@ Here we suggest to use HTTP API, since this use case is not much conversational,
     It gives the backend the flexibility to control the URLsm, maybe useful in some unforseen circumstances, but also adds a little complexity at front-end.
 
 3. /docs/{uuid}/meta
+
     GET the docment meta data.
+
     The service will return document basic attributes, plus the meta data like
     ````JSON
     {
@@ -221,8 +230,11 @@ Here we suggest to use HTTP API, since this use case is not much conversational,
     }
     ````
 4. /docs/{uuid}/scan-results
+
     GET the docment scan results data.
+
     The service will return document basic attributes, plus the scan results data like
+
     ````JSON
     {
         "id": "abcd-efgh...",
@@ -231,7 +243,9 @@ Here we suggest to use HTTP API, since this use case is not much conversational,
         "scan-results": []
     }
     ````
+
     or when there are scan finished
+
     ````JSON
     {
         "id": "abcd-efgh...",
@@ -260,6 +274,7 @@ For the #3 and #4, we let front-end to "pull" data periodically, instead of "pus
         }
     }
 ````
+
 This gives the backend option to control the pulling frequency at front-end.
 
 
@@ -324,11 +339,13 @@ Once we have a working design. Next to check the non-functional criterias to wor
 To make sure the system performs we can leverage caching
 
 * RDS: create read replicates
-* Elastic Cache or Redis: In our use case, clients will pull the scan results data continously until the process is finished. We can make the Orchestrator update the Scan Results directly in cache first before updating RDS and DynamoDB, to reduce the hits to the database.
+* Elastic Cache or Redis: 
+    In our use case, clients will pull the scan results data continously until the process is finished. We can make the Orchestrator update the Scan Results directly in cache first before updating RDS and DynamoDB, to reduce the hits to the database.
 * API gateway: set up rate limit.
 * API gateway: setup cache
 * React: leverage front-end cache, and HTTP cache tag.
-* File I/O: In current design, each of the services (meta-extrator, virus-scanner) will download the file from S3 to the container. If this may become issue, we can use EFS or shared file system, mount it to the service containers. This way, we can copy the document from S3 to the shared file sytem once, and reduce the downloads from S3.
+* File I/O: 
+    In current design, each of the services (meta-extrator, virus-scanner) will download the file from S3 to the container. If this may become issue, we can use EFS or shared file system, mount it to the service containers. This way, we can copy the document from S3 to the shared file sytem once, and reduce the downloads from S3.
 
 ## Cost
 
