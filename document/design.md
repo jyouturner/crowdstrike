@@ -9,48 +9,49 @@
 3. user can see meta data, including file name, size
 4. user can get scan status
 
-### meta data
+### basic attribute
 1. name
 2. file type: PDF, etc
 3. size
 
-Note: we will run a script to extract the meta data of the uploaded file. It is assumly quick task (<200 ms). However, we want to be able to update the script quickly withought going through formal deployment/release process.
+### meta data
+
+* We will have script to extract the meta data of the uploaded file. It is assumly quick task. 
+* meta data are key-value pairs.
+* The team wants to be able to update the script quickly withought going through formal deployment/release process.
 
 ### scan results
 
-There are many (tens of) scanners from different vendors, available on different OS (Linux, Windows). 
-
-User will see a list of 
-1. scanner name
-2. scanner results, for example, "not dected", or whatever messages
-
-Note: since we are running many scanners, some are quick, some are slow. User will see the latest results added to the page. The whole process will take seconds to finish.
+* we will use many (tens of) scanners from different vendors, available on different OS (Linux, Windows). 
+* we run the scanners to scan the uploaded file
+* present to suer the results from each scanner, including
+    1. scanner name
+    2. scanner results, for example, "not dected", or whatever messages
+* Since we are running many scanners, some are quick, some are slow. User will see the latest results added to the page. The whole process will take 10-20 seconds to finish.
 
 ### non-functional requirements
 
-1. need to handle millions of documents per day
-2. be able to handle size up to 1G. 
-3. performance SLA, be able to display meta data and status in 500 million seconds
-4. Scan performance expected to finish and present to user in 10 seconds.
+1. Expect to have millions of documents uploaded per day
+2. File size up to 1G. 
+3. Display meta data and status quickly, for example in 500 million seconds
+4. Present scan results to user in less than X seconds.
 5. team can update the extractor script without deployment process
 6. The documents will be stored forever.
 
 
 ## Design Approach
 
-1. First, we identify the pattern of the problem domain - this is a document upload-process flow, a well understood pattern is to leverage async task/job workflow to achieve high throughput.
+1. First, we identify the pattern of the problem domain - for example, a document upload-process flow. A well understood pattern is to leverage async task/job workflow to achieve high throughput.
 
-We will apply some common practice to establish a baseline design, starting from logic model, then zoom in each component and make decisions or suggestions on the architecture. 
+We will apply some common practices to establish a baseline design, starting from logic model, breaking down to multple components, then zoom in and make decisions or suggestions on the architecture. 
 
-2. Once we have a working design, we want to improve it to ensure
-
-1. scalability
-2. reliability
-3. performance
-4. monitoring/observability
-5. cost
-
-3. Last we think of special edge cases of the particular domain.
+2. Once we have a working design, we want to improve it by
+    * scalability
+    * availability
+    * performance
+    * monitoring/observability
+    * cost
+3. Finally we consider some special edge cases of the particular domain.
 
 ## Components 
 
@@ -58,29 +59,25 @@ We can start to plan our system with 3 components
 
 1. front end - the user experiences
 2. web services - to serve the web, to handle upload, confirm and present the meta data and scan results.
-3. backend tasks or jobs - services to extrac meta data, and scan virus, then store results for API to present to front end
-
-We will store data and documents in
-
-1. database
-2. file storage
+3. backend tasks or jobs - services to extrac meta data, and scan virus, then store results.
+4. Data storage
+    * database
+    * file storage
 
 ![Components](images/components_model.png)
 
-We make the decision or assumption that we will design this sytem to run in cloud (AWS, or GCD or Azure). Below we will use AWS as example, but the solution will work for other cloud service providers.
+We decide this sytem will run in cloud (AWS, or GCD or Azure). Below we will use AWS as example, but the solution will work for other cloud service providers.
 
 ### Frontend
 
 We assume it will be a React app. (irrelevent to our sytem design)
 
-### File Storage
+### File Storage S3
 
-We can use AWS S3 to store the documents, so we can leverage
-
-* enoumous volume and great performance
-* for old documents ( > 1 year) we can move to cold storage
-* low cost, especially within the same region
-* ` we can create signed URL with secured token, this way, front end can upload the file directly to S3, reducing the needs of resource at service layer. `
+We can use AWS S3 to store the documents, so we can leverage its scalibility, availability and low cost.
+Also:
+* for old documents ( > 1 year) we can move to cold storage for example S3 Glacier
+* Particularily, we can create signed URL with secured token, this way, front end can upload the file directly to S3, reducing the needs of resource at service layer.
 
 Note: to leverage the pre-signed URL for directly uploading to S3, our React App will follow below steps
 
@@ -123,16 +120,16 @@ Daily storage: 1 million files * 10 KB/file = 10,000 MB (approximately 9.77 GB)
 Yearly storage: 300 million files * 10 KB/file = 3,000,000 MB (approximately 2,930 GB or 2.86 TB)
 10-year storage: 3,000 million files * 10 KB/file = 30,000,000 MB (approximately 29,296 GB or 28.6 TB)
 
-We choose between relational database (AWS RDS, Postgres)and Non-SQL (MongoDb, DynamoDB etc).
-With Postgres: best for structural data, ACID compliance, strong feature set (support JSONB), existing SQL tools.
-With DynamoDb: horizonal scale, flxibible schema, write heavy operations.
+Two groups of databases that we can choose from:
+1. relational database (AWS RDS, Postgres), best for structural data, ACID compliance, strong feature set (support JSONB), existing SQL tools.
+1. Non-SQL (MongoDb, DynamoDB etc). horizonal scale, flxibible schema, write heavy operations.
 
-Suggestions
+Suggestions to get best from both:
 
-1. RDS/Postgres for document meta data
+1. RDS (Postgres, Aurora) for document attributes and meta data in JSONB
 2. NonSQL (DynamoDB, MongoDB) for scan results.
 
-` Note: although we store older files, but we can assume they are rarely used, so we can partition data by age.`
+Note: relationship database support partition too, for example, we can partition document table by age, to improve scalability and performance.
 
 
 ### Front End and Web Services 
@@ -144,16 +141,20 @@ Now we can update our front end and web services diagram
 
 In the updated version, we have
 
-1. added API gateway, which provides support of API Key for authentication, Rate limit
+1. API gateway, which support API Key for authentication, Rate limit, and caching.
 2. ELB load balancer to load balance requests.
 3. Web services. We can deploy them to EKS, to leverage the container orchistration, autoscaling and all the goodies from K8s
-4. We can use Restful API for the web services. Note, to continuously deliver scan results to clients, there are more than one choices. We can choose to "push" (websockets, sse etc) or let client to "pull" by usual http api. Here we suggest to use HTTP API, since this use case is not much conversational, like game or chat room. Developers are more familiar with Restful API too. We will mitigate concerns of throughput by caching, and autoscaling.
+4. We can use Restful API for the web services. Note, to continuously deliver scan results to clients, there are more than one choices. 
+    * Server to "push" (websockets, sse etc)
+    * Client to "pull" by usual HTTP API. 
+    
+Here we suggest to use HTTP API, since this use case is not much conversational, like game or chat room. Developers are more familiar with Restful API too. We will mitigate concerns of throughput by caching, and autoscaling.
 5. Our web services have 4 endpoints
     * /docs/request-upload
     * /docs/{uuid}/confirm-upload
     * /docs/{uuid}/meta
     * /docs/{uuid}/scan-results
-6. We add a Lambda function, triggered by the S3 event when a file is uploaded. This Lambda function can update the Document status to "uploaded", and "upload_time"
+6. A Lambda function, triggered by the S3 event when a file is uploaded, to update the Document status to "uploaded", and "upload_time"
 
 ### API Endpoints
 
@@ -178,7 +179,7 @@ In the updated version, we have
     ````
     The React App will then upload the file to the S3 bucket, and keep the document id for later requests.
 
-    To help performance, we can consider to pre-generate URLs and store them in Cache with TTL, this way, the service can just grab one and use it. Of course, that means we will have a backend job to continuously generate new URLs.
+    To further improve performance, we can consider generating URLs and storing them in Cache (redis) with TTL. The service can just grab URL when needed. Of course, that means we will have a backend job (Lambda) to continuously generate new URLs.
 
 2. /docs/{uuid}/confirm-upload
     POST method, with document id in the request path
@@ -191,7 +192,7 @@ In the updated version, we have
         "status": "in progress",
     }
     ````
-    one interesting question is whether to include the API urls in the response, for example
+    We may consider including the API urls in the response, for example
     ````JSON
     {
         "urls": {
@@ -201,7 +202,7 @@ In the updated version, we have
         }
     }
     ````
-    it gives the backend the flexibility to control the URLsm, maybe useful in some unforseen circumstances, but also added a little complexity at front-end.
+    It gives the backend the flexibility to control the URLsm, maybe useful in some unforseen circumstances, but also adds a little complexity at front-end.
 
 3. /docs/{uuid}/meta
     GET the docment meta data.
@@ -261,45 +262,52 @@ This gives the backend option to control the pulling frequency at front-end.
 
 ## Backend Tasks
 
-Althpugh the user case is pretty simple with two tasks: meta extraction, and virus scanning, still considering the number of various virus scanners, and the large volume of uploaded files, we need to have a solid task or workflow here.
+Our user case is pretty simple with two tasks: meta extraction, and virus scanning. To handle the large volume of uploaded files, we need to have a solid task or job workflow.
 
-We can use open source workflow coordination package like Apache Airflow, or use the solutions provided by cloud provider, for example Step Function by AWS. Here we propose to use a well known practice to use Queue or message broker and pub/sub pattern to coordinate tasks. In this case, we can choose the AWS SQS and SNS
+Some of the options:
 
-* use SQS queue to distribute tasks to workers (meta extractor, virus scanner). Each worker type has its own queue.
-* user SNS topic to pub/sub the results after the task done
-* we will have a orchestrator to manage the flow, including sending message to task queue and subscribing to "done" topics.
+* Open source workflow projects like Apache Airflow
+* Solutions provided by cloud provider, for example Step Function by AWS. 
+* Async task management with queue, pub/sub pattern
+
+Here we propose to use Queue or message broker and pub/sub pattern to coordinate tasks, for the simplicity, maturity,  and built in support from AWS, ie, SQS and SNS.
+
+1. use SQS queue to distribute tasks to workers (meta extractor, virus scanner). Each worker type has its own queue.
+2. user SNS topic to pub/sub the results after the task done
+3. we will have a orchestrator to manage the flow, including sending message to task queue and subscribing to "done" topics.
 
 ![tasks](images/components_tasks.png)
 
-This architecture is easy to understand and implement. It can achive great scalability, and provide flexibility too. With the orchestrator, we can have fine tuned control over the flow, this is useful in the future. 
+This architecture is easy to understand and implement. We can achive great scalability, and flexibility too. With the orchestrator, we can have fine tuned control over the flow, this could be useful in the future. 
 
 ### The Orchestrator
 
-This is the brain of the workflow, and we need to think through it. It functions
+It functions as the brain of the workflow:
 
-1. listen to the doc_ready_to_process queue, get the UUID of the doc, put task to meta_extraction queue, and update the process status.
-2. subscribe to the meta_extraction_done topic, update RDS with the meta data, decides the virus scanner list, and send tasks to the queues of the scanners. update the process information, including status, and also store the counter (ie, 0)
-3. subscribe to the virus_scanner_done topic, update DynamoDB with the results, increase counter, update process status.
+1. Orchestrator listens to the request_to_process queue, get the UUID of the doc, put task to request_extract_meta queue, and update the process status.
+2. Service meta-extraction service listen to the queue and run the task to extract meta, and publish message to extract_meta_done topic
+3. Orchestrator subscribes to the extrac_meta_done topic, update RDS with the meta data, publish to request_virus_scan topic. update the process information, including status, and also store the counter (ie, 0)
+4. Each virus scan services has its own SQS subscription to the request_virus_scan topic. And run scanner upon new message. And publish results to virus_scan_done topic
+3. Orchestrator subscribes to the virus_scanner_done topic, update DynamoDB with the results, increase counter, update process status.
 
-Actually, we can leverage the AWS SQS-SNS integration to have the virus-scanner SQS directly subscribe to SNS topic. Therefore, the orchestrator does not need to iterate all the SQS queues and put message in each queue. Instead, it can just publish to one topic.
 
-The biggest risk of this design is that this orchestrator becomes the Single Point of Failure of the whole architecture. The other option is to place the same logic in the meta-extraction and virus-scanner services. Therefore, in terms of availability, we need to choose between "distributed failure" vs "centralized failure". With K8s (EKS, GKE) we can mitigate the failure, so we suggest to use the orchestrator.
+In this design, we can decouple the services from the flow logic, and have great control of the flow. The tradeoff is that orchestrator becomes the Single Point of Failure. The other option is to place the same logic in the meta-extraction and virus-scanner services. Therefore, in terms of availability, we need to choose between "distributed failure" vs "centralized failure". To minigate the risk, we will leverage K8s (EKS, GKE), even Zoo Keeper or Etcd if necessary.
 
-Also notice that none of the services (meta-extractor, virus-scanner) write to database, instead, they put the results in the SNS message (the SNS message size limit is large enough), this design will make the services simple enough, and also get us better control of the database writes.
+None of the services (meta-extractor, virus-scanner) writes results to database, instead, they put the results in the SNS message (the SNS message size limit is large enough), this design will make the services simple enough, and also get us better control of the database writes.
 
 ## Infrastructure
 
-Mentioned earlier, we will containerize the services (API, backend services), and leverate K8S (EKS, GKE).
+We will containerize the services (API, backend services), and run them in K8S cluster (EKS, GKE).
 
 ## Improvements
 
-At this point, we have a working design. Next let's check the non-functional criterias to find any improvements.
+Once we have a working design. Next to check the non-functional criterias to work on any improvements.
 
 ## Scalibility
 
 * The arhiceture can scale with S3, EKS, SQS, and SNS.
-* We can partition RDS by age
-* we can have Lambda function to move older buckets to cold storage
+* RDS: We can partition RDS by age
+* S3: we can have Lambda function to move older buckets to cold storage
 
 ## Availability
 
@@ -310,41 +318,38 @@ At this point, we have a working design. Next let's check the non-functional cri
 
 ## Performance
 
-We need to pay attention to the performance hit to RDS.
+To make sure the system performs we can leverage caching
 
-* create read replicates
-* leverage caching (Elastic Cache or separate Redis), for example, in our use case, the clients will pull the scan results data frequently while the document is being processed. We can make the Orchestrator update the Scan Results in cache first before updating RDS and DynamoDB. This way, we can greatly reduce the hit to the database, and make most of the reads from cache.
-* API gateway has rate limit.
-* API gateway has cache too
-* leverage front-end cache, and HTTP cache tag.
-* In our design, each of the services (meta-extrator, virus-scanner) will download the file from S3 before processing it. If this may become issue, we can use EFS or shared file system, mount it to the service containers. This way, we can copy the document from S3 to the shared file sytem once, and reduce the downloads from S3.
+* RDS: create read replicates
+* Elastic Cache or Redis: In our use case, clients will pull the scan results data continously until the process is finished. We can make the Orchestrator update the Scan Results directly in cache first before updating RDS and DynamoDB, to reduce the hits to the database.
+* API gateway: set up rate limit.
+* API gateway: setup cache
+* React: leverage front-end cache, and HTTP cache tag.
+* File I/O: In current design, each of the services (meta-extrator, virus-scanner) will download the file from S3 to the container. If this may become issue, we can use EFS or shared file system, mount it to the service containers. This way, we can copy the document from S3 to the shared file sytem once, and reduce the downloads from S3.
 
 ## Cost
 
 * S3 cost is manageable, we can leveragte the less expensive cold storage (Amazon S3 Glacier) for older files.
 * most of cost likely are on EKS
-* The web service can check the Hash of the docuemnt, if it is already processed within certain period (last 7 days), it will display the results from database, without re-processing it.
+* The web service can check the Hash (for example SHA256) of the docuemnt, if it is already processed within certain period (last 7 days), it will display the results from database, without re-processing it.
 
 ## Monitoring
 
 With such distributed system, we need to setup extensive monitoring. For example, we can use Datadog to monitor AWS services and also our services.
 
 AWS Services:
-
-    Amazon S3:
+    S3:
         Bucket size (number of objects and total storage used)
         Request rate (PUT, GET, DELETE, and other operations)
         Latency (time taken to complete requests)
         Error rate (4xx and 5xx errors)
-
-    Amazon SQS:
+    SQS:
         Queue size (number of messages in the queue)
         Message age (age of oldest message in the queue)
         Number of messages sent/received/deleted
         Latency (time taken to send/receive messages)
         Error rate (failed SendMessage and ReceiveMessage calls)
-
-    Amazon RDS (PostgreSQL):
+    RDS (PostgreSQL):
         CPU utilization
         Memory usage
         Storage usage
@@ -353,36 +358,30 @@ AWS Services:
         Database transaction rate
         Query latency
         Error rate
-
-    Amazon DynamoDB:
+    DynamoDB:
         Read and write capacity units
         Consumed read and write capacity
         Throttled read and write events
         Latency (time taken for GetItem, PutItem, and UpdateItem operations)
         Error rate (failed read and write requests)
-
-EKS Cluster:
-
+EKS:
     Node-level metrics:
         CPU usage and utilization
         Memory usage and utilization
         Disk usage and IOPS
         Network throughput (inbound and outbound)
-
     Pod-level metrics:
         CPU usage and limits
         Memory usage and limits
         Network throughput (inbound and outbound)
         Number of restarts (to detect crash loops)
         Pod status (Running, Pending, Failed, etc.)
-
     Kubernetes control plane metrics:
         API server request rate and latency
         etcd read and write latency
         Controller manager and scheduler metrics
 
 Application-level metrics:
-
         Request rate (for all services)
         Error rate (HTTP 4xx and 5xx errors), available in Api Gateway
         Request latency
@@ -393,7 +392,6 @@ Application-level metrics:
 
     Frontend:
         Implement retries with exponential backoff for API calls.
-        Provide user feedback on failed uploads and allow users to retry uploads.
 
     API:
         Add error handling and logging to track failures.
@@ -401,12 +399,12 @@ Application-level metrics:
         Return appropriate error messages and HTTP status codes for failed requests.
 
     S3:
-        Use S3 bucket versioning to preserve previous versions of objects in case of accidental overwrites or deletions.
+        Use S3 bucket versioning.
         Enable S3 object replication to another AWS region for added data durability.
 
     EKS Cluster:
         Implement liveness and readiness probes for microservices to ensure that unhealthy instances are restarted.
-        Use Kubernetes deployments to ensure the desired number of replicas are running at all times.
+        Set desired number of replicas are running at all times.
         Monitor pod logs and resource usage to identify and mitigate issues.
 
     SQS Queues:
@@ -428,19 +426,19 @@ Application-level metrics:
 
 ## Application Level Failure Handling
 
-    Error logging: Make sure that both services log errors and relevant information about the context of the failure. This will help with debugging and identifying any issues that need to be resolved.
+    * Error logging: Make sure that both services log errors and relevant information about the context of the failure. This will help with debugging and identifying any issues that need to be resolved.
 
-    Retry mechanism: Implement retries with exponential backoff for transient errors within the services. For example, if there's a temporary issue with a third-party library or an external service, the retry mechanism can help overcome it.
+    * Retry mechanism: Implement retries with exponential backoff for transient errors within the services. For example, if there's a temporary issue with a third-party library or an external service, the retry mechanism can help overcome it.
 
-    Dead-letter queues: Use dead-letter queues in SQS to capture messages that have failed processing after a specified number of attempts. This will allow you to investigate and fix the issues, and then re-process the failed messages.
+    * Dead-letter queues: Use dead-letter queues in SQS to capture messages that have failed processing after a specified number of attempts. This will allow you to investigate and fix the issues, and then re-process the failed messages.
 
-    Manual intervention: In some cases, manual intervention may be required to resolve issues with the files themselves (e.g., corrupted files, unsupported formats). Provide tools or procedures for your team to manually inspect and re-process failed files if necessary.
+    * Manual intervention: In some cases, manual intervention may be required to resolve issues with the files themselves (e.g., corrupted files, unsupported formats). Provide tools or procedures for your team to manually inspect and re-process failed files if necessary.
 
-    Monitoring and alerting: Set up monitoring and alerting for both services to detect high failure rates or other anomalies. This will help you identify issues early and take corrective action.
+    * Monitoring and alerting: Set up monitoring and alerting for both services to detect high failure rates or other anomalies. This will help you identify issues early and take corrective action.
 
-    Idempotent processing: Ensure that both services are designed to be idempotent, meaning that they can be safely retried without causing duplicate processing or other side effects. This will allow you to safely re-process failed messages without worrying about unintended consequences.
+    * Idempotent processing: Ensure that both services are designed to be idempotent, meaning that they can be safely retried without causing duplicate processing or other side effects. This will allow you to safely re-process failed messages without worrying about unintended consequences.
 
-    Versioning and rollbacks: Use versioning for your service deployments, so you can easily roll back to a previous version in case of issues with a new release. This can help you quickly recover from failures caused by software bugs or configuration errors.
+    * Versioning and rollbacks: Use versioning for your service deployments, so you can easily roll back to a previous version in case of issues with a new release. This can help you quickly recover from failures caused by software bugs or configuration errors.
 
 ## Summary
 
