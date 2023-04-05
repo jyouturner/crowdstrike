@@ -111,6 +111,8 @@ Each scan result have name and result text
 | file_id	| UUID	| Foreign key referencing the files table
 | scanner_name	| VARCHAR	| Name of the virus scanner
 | scan_result	| VARCHAR	| Scan result text (e.g., "undetected" or issue description)
+| start_at | TIMESTAMP | the time when scanner starts scanning the doc
+| end_at | TIMESTAMP | the time when scanning is finished
 
 Now let's do a quick estimate of the size of data. The doc meta data appears to be small enough, say 1K. However, the scan results may have bigger size since we will have many scanners. Also, we are handling millions of file evey day, and store the files permanently, even in 10 years, the volume will be huge.
 
