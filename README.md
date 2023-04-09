@@ -14,6 +14,79 @@ This is the POC of Intellidox, for users to upload and process files, for exampl
 
 [More detail of the sytem design](document/design.md)
 
+## Diagram
+
+```mermaid
+graph LR
+  A[React Frontend] --> B1(Upload API)
+  A --> B2(Confirm API)
+  A --> B3(Get Metadata API)
+  A --> B4(Get Scan Results API)
+
+  B1 --> C(AWS S3/GCS)
+  B1 --> D(Generate Pre-signed URL)
+  B1 --> E{Check for SHA256 hash}
+  E --> |New File| F(Store Metadata in Postgres)
+  E --> |Existing File| G(Update Metadata in Postgres)
+
+  B2 --> H{Check File Exists in S3/GCS}
+  H --> |Exists| I(Update Metadata in Postgres)
+  I --> J(Create Event)
+
+  J --> K(Publish Event to SNS Topic)
+  K --> L(Metadata Extraction Subscriber)
+  K --> M(Virus Scanning Subscriber)
+
+  L --> N(Metadata Extraction Service)
+  N --> O(Update Metadata in Postgres)
+  N --> P(Publish Metadata Extraction Completed Event)
+
+  M --> Q1(Virus Scanning Service 1)
+  M --> Q2(Virus Scanning Service 2)
+  M --> Q3(Virus Scanning Service 3)
+
+  Q1 --> R1(Update Virus Scan Results in DynamoDB)
+  Q2 --> R2(Update Virus Scan Results in DynamoDB)
+  Q3 --> R3(Update Virus Scan Results in DynamoDB)
+
+  P --> S(Virus Scanning Subscriber)
+  S --> Q1
+  S --> Q2
+  S --> Q3
+
+  B3 --> O
+  B4 --> T(Get Scan Results from DynamoDB)
+
+  O --> |API Response| A
+  T --> |API Response| A
+
+  subgraph "Kubernetes Cluster"
+    N
+    Q1
+    Q2
+    Q3
+  end
+
+  subgraph "AWS/GCP"
+    C
+    D
+  end
+
+  subgraph "PostgreSQL Database"
+    F
+    G
+    I
+    O
+  end
+
+  subgraph "DynamoDB Database"
+    R1
+    R2
+    R3
+    T
+  end
+```
+
 ### Frontend: A React app for uploading files and displaying results.
     
     Uploads files directly to S3 using pre-signed URLs.
